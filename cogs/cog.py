@@ -133,6 +133,10 @@ class RecieverCommands(commands.Cog):
         self.bot.log.info("Finished streamer catchup")
         await ctx.send("Finished catchup!", ephemeral=True)
 
+    @slash_command(description="Get the invite link for the bot")
+    async def invite(self, ctx):
+        await ctx.send(f"<https://discord.com/oauth2/authorize?client_id={self.bot.user.id}&permissions=84992&scope=bot%20applications.commands>", ephemeral=True)
+
     @slash_command(description="Get various bot information such as memory usage and version")
     async def botstatus(self, ctx):
         p = pretty_time(self.bot._uptime)
