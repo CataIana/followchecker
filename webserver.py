@@ -29,6 +29,7 @@ class RecieverWebServer():
         return web.Response(status=404)
     
     async def _authorize(self, request):
+        self.bot.log.info("Processing authorization")
         code = request.query.get("code", None)
         if code is None:
             return web.Response(status=400)
@@ -44,6 +45,7 @@ class RecieverWebServer():
 
         user_response = await self.bot.aSession.get("https://api.twitch.tv/helix/users", headers={"Client-Id": self.bot.auth["client_id"], "Authorization": f"Bearer {rj['access_token']}"})
         user_json = await user_response.json()
+        self.bot.log.info(f"Received authorization for user ID {user_json['data'][0]['id']}")
         user_authorization[user_json['data'][0]['id']] = {"access_token": rj["access_token"], "refresh_token": rj["refresh_token"]}
         async with aiofiles.open("config/user_authorization.json", "w") as f:
             await f.write(json.dumps(user_authorization, indent=4))
