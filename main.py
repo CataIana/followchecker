@@ -62,7 +62,7 @@ class TwitchFollowManager(commands.Bot):
         if response.status == 401: #Reauth pog
             reauth = await session.post(url=f"https://id.twitch.tv/oauth2/token?client_id={self.auth['client_id']}&client_secret={self.auth['client_secret']}&grant_type=client_credentials")
             if reauth.status == 401:
-                self.bot.log.critical("Well somethin fucked up. Check your credentials!")
+                self.log.critical("Well somethin fucked up. Check your credentials!")
                 await self.close()
             reauth_data = await reauth.json()
             self.auth["access_token"] = reauth_data["access_token"]
@@ -86,13 +86,14 @@ class TwitchFollowManager(commands.Bot):
         if response.status == 401: #Reauth pog
             reauth = await session.post(url=f"https://id.twitch.tv/oauth2/token?refresh_token={user_authorization[user_id]['refresh_token']}&client_id={self.auth['client_id']}&client_secret={self.auth['client_secret']}&grant_type=refresh_token")
             if reauth.status == 401:
-                self.bot.log.critical("Well somethin fucked up. Check your credentials!")
+                self.log.critical("Well somethin fucked up. Check your credentials!")
                 return
             reauth_data = await reauth.json()
-            self.auth["access_token"] = reauth_data["access_token"]
-            self.auth["refresh_token"] = reauth_data["refresh_token"]
+            user_authorization["access_token"] = reauth_data["access_token"]
+            user_authorization["refresh_token"] = reauth_data["refresh_token"]
+            self.log.info(f"Got new token for {user_id}")
             async with aiofiles.open("config/user_authorization.json", "w") as f:
-                await f.write(json.dumps(self.auth, indent=4))
+                await f.write(json.dumps(user_authorization, indent=4))
             return await session.request(method=method, url=url, headers={"Authorization": f"Bearer {user_authorization[user_id]['access_token']}", "Client-Id": self.auth["client_id"]}, **kwargs)
         else:
             return response

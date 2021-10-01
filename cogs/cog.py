@@ -91,12 +91,12 @@ class RecieverCommands(commands.Cog):
             async with aiofiles.open("config/user_authorization.json") as f:
                 user_auth = json.loads(await f.read())
         except FileNotFoundError:
-            return await ctx.send("<:red_tick:809191812337369118> Error reading config!", ephemeral=True)
+            user_auth = {}
         except JSONDecodeError:
-            return await ctx.send("<:red_tick:809191812337369118> Error reading config!", ephemeral=True)
+            user_auth = {}
 
         if user_auth.get(broadcaster_id, None) is None:
-            return await ctx.send(f"<:red_tick:809191812337369118> No authorization token! You must authorize the broadcasters account with: {self.bot.auth_url}", ephemeral=True)
+            return await ctx.send(f"<:red_tick:809191812337369118> No authorization token! You must authorize the broadcasters account with: <{self.bot.auth_url}>", ephemeral=True)
 
         response = await self.bot.user_api_request(method="put", url=f"https://api.twitch.tv/helix/users/blocks?target_user_id={user_id}&reason=spam&source_context=chat", user_id=broadcaster_id)
         if response.status in [400, 401]:
