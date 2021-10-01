@@ -1,0 +1,5 @@
+*.cache
+auth.json
+follows.json
+user_authorization.json
+__pycache__

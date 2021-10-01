@@ -1,0 +1,6 @@
+{
+    "client_id": "Twitch Client ID",
+    "client_secret": "Twitch Client Secret",
+    "bot_token": "Discord bot token",
+    "callback_url": "Your callback URL Eg https://example.com"
+}

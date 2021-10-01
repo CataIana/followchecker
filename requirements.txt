@@ -1,0 +1,4 @@
+discord.py
+dislash.py
+aiofiles
+psutil
