@@ -12,6 +12,7 @@ import aiofiles
 import logging
 import json
 from dislash import InteractionClient, ActionRow, Button, ButtonStyle
+from dateutil import parser
 
 class TwitchFollowManager(commands.Bot):
     def __init__(self):
@@ -123,12 +124,19 @@ class TwitchFollowManager(commands.Bot):
                 custom_id=f"{data['event']['broadcaster_user_id']}/{data['event']['user_id']}"
             )
         )
+        user_response = await self.api_request(f"https://api.twitch.tv/helix/users?id={data['event']['user_id']}")
+        self.log.info(await user_response.json())
+        user = (await user_response.json())["data"][0]
+        created_at_timestamp = int(parser.parse(user["created_at"]).timestamp())
+
 
         embed = Embed(title="New Follower", colour=11537322, timestamp=utcnow())
         embed.add_field(name="Broadcaster", value=data["event"]["broadcaster_user_login"])
-        embed.add_field(name="Follower", value=data["event"]["user_login"])
-        embed.add_field(name="Still following?", value=still_following)
-        embed.set_footer(text=f"Follower User ID: {data['event']['user_id']}")
+        embed.add_field(name="Follower", value=user["login"])
+        embed.add_field(name="Account Created", value=f"<t:{created_at_timestamp}:R>")
+        embed.add_field(name="Mod Card", value=f"[Link](https://www.twitch.tv/popout/{data['event']['broadcaster_user_login']}/viewercard/{user['login']})")
+        embed.add_field(name="Still following?", value="Yes" if still_following else "No")
+        embed.set_footer(text=f"Follower User ID: {user['id']}")
         for data in callbacks[channel]["channels"].values():
             c = self.get_channel(data["notif_channel_id"])
             if c is not None:

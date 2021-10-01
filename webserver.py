@@ -121,7 +121,7 @@ class RecieverWebServer():
             self.bot.log.critical(f"Authorization Revoked for {channel}!")
             return web.Response(status=202)
         elif mode == "notification":
-            self.bot.log.info(f"Notification for {channel}")
+            self.bot.log.info(f"Follow notification for {channel}")
             return await self.notification(channel, data)
         else:
             self.bot.log.info("Unknown mode")
