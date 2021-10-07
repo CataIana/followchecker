@@ -90,8 +90,8 @@ class TwitchFollowManager(commands.Bot):
                 self.log.critical("Well somethin fucked up. Check your credentials!")
                 return
             reauth_data = await reauth.json()
-            user_authorization["access_token"] = reauth_data["access_token"]
-            user_authorization["refresh_token"] = reauth_data["refresh_token"]
+            user_authorization[user_id]["access_token"] = reauth_data["access_token"]
+            user_authorization[user_id]["refresh_token"] = reauth_data["refresh_token"]
             self.log.info(f"Got new token for {user_id}")
             async with aiofiles.open("config/user_authorization.json", "w") as f:
                 await f.write(json.dumps(user_authorization, indent=4))
