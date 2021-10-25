@@ -76,12 +76,12 @@ class TwitchFollowManager(commands.Bot):
 
     async def user_api_request(self, url, user_id, session=None, method="get", **kwargs):
         try:
-            async with aiofiles.open("config/user_authorization.json",) as f:
+            async with aiofiles.open("config/user_authorization.json") as f:
                 user_authorization = json.loads(await f.read())
         except FileNotFoundError:
             return
         except JSONDecodeError:
-            pass
+            return
         session = session or self.aSession
         response = await session.request(method=method, url=url, headers={"Authorization": f"Bearer {user_authorization[user_id]['access_token']}", "Client-Id": self.auth["client_id"]}, **kwargs)
         if response.status == 401: #Reauth pog
@@ -125,7 +125,6 @@ class TwitchFollowManager(commands.Bot):
             )
         )
         user_response = await self.api_request(f"https://api.twitch.tv/helix/users?id={data['event']['user_id']}")
-        self.log.info(await user_response.json())
         user = (await user_response.json())["data"][0]
         created_at_timestamp = int(parser.parse(user["created_at"]).timestamp())
 
