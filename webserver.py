@@ -4,6 +4,7 @@ import json
 import hmac
 import hashlib
 import aiofiles
+from collections import deque
 
 class RecieverWebServer():
     def __init__(self, bot):
@@ -55,11 +56,11 @@ class RecieverWebServer():
     async def verify_request(self, request, secret):
         try:
             async with aiofiles.open("cache/notifcache.cache") as f:
-                notifcache = json.loads(await f.read())
+                notifcache = deque(json.loads(await f.read()), maxlen=10)
         except FileNotFoundError:
-            notifcache = []
+            notifcache = deque(maxlen=10)
         except json.decoder.JSONDecodeError:
-            notifcache = []
+            notifcache = deque(maxlen=10)
 
         try:
             message_id = request.headers["Twitch-Eventsub-Message-Id"]
@@ -79,9 +80,8 @@ class RecieverWebServer():
         if signature != expected_signature:
             return False
         notifcache.append(message_id)
-        if len(notifcache) > 10: notifcache = notifcache[1:]
         async with aiofiles.open("cache/notifcache.cache", "w") as f:
-            await f.write(json.dumps(notifcache, indent=4))
+            await f.write(json.dumps(list(notifcache), indent=4))
         return True
             
 

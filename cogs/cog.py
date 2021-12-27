@@ -1,8 +1,8 @@
-from discord import Embed, TextChannel, NotFound
-from discord.ext import commands
-from discord.utils import utcnow
-from dislash import slash_command, Option, OptionType, is_owner, SlashInteraction, BadArgument, BotMissingPermissions, ApplicationCommandError, has_guild_permissions
-import discord
+from disnake import Embed, TextChannel, NotFound, ApplicationCommandInteraction, MessageInteraction
+from disnake.ui import View
+from disnake.ext import commands
+from disnake.utils import utcnow
+import disnake
 import json
 import asyncio
 from datetime import datetime
@@ -16,9 +16,12 @@ from os import getpid
 import sys
 import psutil
 from enum import Enum
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ..main import TwitchFollowManager
 
 
-class SubscriptionError(ApplicationCommandError):
+class SubscriptionError(commands.CommandError):
     def __init__(self, message = None):
         super().__init__(message or "There was an error handling the eventsub subscription")
 
@@ -68,16 +71,15 @@ class pretty_time:
 
 class RecieverCommands(commands.Cog):
     def __init__(self, bot):
-        self.bot = bot
+        self.bot: TwitchFollowManager = bot
         super().__init__()
-        self.bot.help_command = None
 
     @commands.Cog.listener()
-    async def on_slash_command(self, ctx):
-        self.bot.log.info(f"Handling slash command {ctx.slash_command.name} for {ctx.author} in {ctx.guild.name}")
+    async def on_slash_command(self, ctx: ApplicationCommandInteraction):
+        self.bot.log.info(f"Handling slash command {ctx.application_command.name} for {ctx.author} in {ctx.guild.name}")
 
     @commands.Cog.listener()
-    async def on_button_click(self, ctx):
+    async def on_button_click(self, ctx: MessageInteraction):
         if not await self.bot.is_owner(ctx.author):
             return await ctx.send("You do not have permission to use this button!", ephemeral=True)
         self.bot.test = ctx
@@ -106,18 +108,20 @@ class RecieverCommands(commands.Cog):
         await ctx.send("<:green_tick:809191812434231316> Blocked user!", ephemeral=True)
 
         #If successful, disable button
-        ctx.component.disabled = True
+        view = View.from_message(ctx.message)
+        for child in view.children:
+            child.disabled = True
         embed = ctx.message.embeds[0]
         embed.colour = 16711680
-        await ctx.message.edit(embed=embed, components=ctx.components)
+        await ctx.message.edit(embed=embed, view=view)
 
-    @slash_command(description="Responds with the bots latency to discords servers")
+    @commands.slash_command(description="Responds with the bots latency to discords servers")
     async def ping(self, ctx):
         gateway = int(self.bot.latency*1000)
         await ctx.send(f"Pong! `{gateway}ms` Gateway") #Message cannot be ephemeral for ping updates to show
 
-    @slash_command(description="Owner Only: Reload the bot cogs and listeners")
-    @is_owner()
+    @commands.slash_command(description="Owner Only: Reload the bot cogs and listeners")
+    @commands.is_owner()
     async def reload(self, ctx):
         cog_count = 0
         for ext_name in dict(self.bot.extensions).keys():
@@ -125,20 +129,20 @@ class RecieverCommands(commands.Cog):
             self.bot.reload_extension(ext_name)
         await ctx.send(f"<:green_tick:809191812434231316> Succesfully reloaded! Reloaded {cog_count} cogs!", ephemeral=True)
     
-    @slash_command(description="Owner Only: Run streamer catchup manually")
-    @is_owner()
+    @commands.slash_command(description="Owner Only: Run streamer catchup manually")
+    @commands.is_owner()
     async def catchup(self, ctx):
         self.bot.log.info("Manually Running streamer catchup...")
         await self.bot.catchup_streamers()
         self.bot.log.info("Finished streamer catchup")
         await ctx.send("Finished catchup!", ephemeral=True)
 
-    @slash_command(description="Get the invite link for the bot")
+    @commands.slash_command(description="Get the invite link for the bot")
     async def invite(self, ctx):
         await ctx.send(f"<https://discord.com/oauth2/authorize?client_id={self.bot.user.id}&permissions=84992&scope=bot%20applications.commands>", ephemeral=True)
 
-    @slash_command(description="Get various bot information such as memory usage and version")
-    async def botstatus(self, ctx):
+    @commands.slash_command(description="Get various bot information such as memory usage and version")
+    async def botstatus(self, ctx: ApplicationCommandInteraction):
         p = pretty_time(self.bot._uptime)
         embed = Embed(title=f"{self.bot.user.name} Status", colour=self.bot.colour, timestamp=utcnow())
         if self.bot.owner_id is None:
@@ -159,14 +163,14 @@ class RecieverCommands(commands.Cog):
         embed.add_field(name="__Bot__", value=botinfo, inline=False)
         memory = psutil.virtual_memory()
         cpu_freq = psutil.cpu_freq()
-        systeminfo = f"**<:python:879586023116529715> Python Version:** {sys.version.split()[0]}\n**<:discordpy:879586265014607893> Discord.py Version:** {discord.__version__}\n**🖥️ CPU:** {psutil.cpu_count()}x @{round((cpu_freq.max if cpu_freq.max != 0 else cpu_freq.current)/1000, 2)}GHz\n**<:microprocessor:879591544070488074> Process Memory Usage:** {psutil.Process(getpid()).memory_info().rss/1048576:.2f}MB\n**<:microprocessor:879591544070488074> System Memory Usage:** {memory.used/1048576:.2f}MB ({memory.percent}%) of {memory.total/1048576:.2f}MB"
+        systeminfo = f"**<:python:879586023116529715> Python Version:** {sys.version.split()[0]}\n**<:discordpy:879586265014607893> Disnake Version:** {disnake.__version__}\n**🖥️ CPU:** {psutil.cpu_count()}x @{round((cpu_freq.max if cpu_freq.max != 0 else cpu_freq.current)/1000, 2)}GHz\n**<:microprocessor:879591544070488074> Process Memory Usage:** {psutil.Process(getpid()).memory_info().rss/1048576:.2f}MB\n**<:microprocessor:879591544070488074> System Memory Usage:** {memory.used/1048576:.2f}MB ({memory.percent}%) of {memory.total/1048576:.2f}MB"
         embed.add_field(name="__System__", value=systeminfo, inline=False)
         embed.set_author(name=self.bot.user.name, icon_url=self.bot.user.display_avatar.with_size(128))
         embed.set_footer(text=f"Client ID: {self.bot.user.id}")
         await ctx.send(embed=embed)
 
-    @slash_command(description="Get how long the bot has been running")
-    async def uptime(self, ctx):
+    @commands.slash_command(description="Get how long the bot has been running")
+    async def uptime(self, ctx: ApplicationCommandInteraction):
         epoch = time() - self.bot._uptime
         conv = {
             "days": str(epoch // 86400).split('.')[0],
@@ -194,14 +198,9 @@ class RecieverCommands(commands.Cog):
         exec(combined)
         return await locals()['__ex'](self, ctx)
 
-    # @slash_command(description="Evalute a string as a command")
-    # async def eval(self, ctx: SlashInteraction,
-    #     command: str = OptionParam(description="The string to be evaluated"),
-    #     respond: bool = OptionParam(True, description="Respond with attributes and functions?"),
-    # ):
-    @slash_command(description="Evalute a string as a command", options=[Option("command", "The string to be evaled", type=OptionType.STRING, required=True), Option("respond", "Should the bot respond with the return values attributes and functions", type=OptionType.BOOLEAN, required=False)])
-    @is_owner()
-    async def eval(self, ctx: SlashInteraction, command, respond=True):
+    @commands.slash_command(description="Evalute a string as a command")
+    @commands.is_owner()
+    async def eval(self, ctx: ApplicationCommandInteraction, command, respond: bool = True):
         code_string = "```nim\n{}```"
         if command.startswith("`") and command.endswith("`"):
             command = command[1:][:-1]
@@ -282,7 +281,7 @@ class RecieverCommands(commands.Cog):
         if isinstance(channel, int): channel = self.bot.get_channel(channel)
         else: channel = self.bot.get_channel(channel.id)
         if not isinstance(channel, TextChannel):
-            raise BadArgument(f"Channel {channel.mention} is not a text channel!")
+            raise commands.BadArgument(f"Channel {channel.mention} is not a text channel!")
 
         perms = {"view_channel": True, "read_message_history": True, "send_messages": True}
         permissions = channel.permissions_for(ctx.guild.me)
@@ -291,10 +290,10 @@ class RecieverCommands(commands.Cog):
         if not missing:
             return True
 
-        raise BotMissingPermissions(missing)
+        raise commands.BotMissingPermissions(missing)
 
-    @slash_command(description="List all the active follow alerts setup in this server")
-    @has_guild_permissions(administrator=True)
+    @commands.slash_command(description="List all the active follow alerts setup in this server")
+    @commands.has_guild_permissions(administrator=True)
     async def listfollowalerts(self, ctx):
         async with aiofiles.open("config/follows.json") as f:
             callback_info = json.loads(await f.read())
@@ -318,16 +317,15 @@ class RecieverCommands(commands.Cog):
         uwu += "```"
         await ctx.send(uwu)
 
-    @slash_command(description="Add alerts for the specific streamer", options=[
-        Option("streamer", description="The streamer username you want to add the alert for", type=OptionType.STRING, required=True),
-        Option("notification_channel", description="The channel to send the follow alerts in", type=OptionType.CHANNEL, required=True)
-    ])
-    @has_guild_permissions(administrator=True)
-    async def addfollowalert(self, ctx: SlashInteraction, streamer, notification_channel):
+    @commands.slash_command(description="Add alerts for the specific streamer")
+    @commands.has_guild_permissions(administrator=True)
+    async def addfollowalert(self, ctx: ApplicationCommandInteraction,
+                            streamer: str = commands.Param(description="The streamer username you want to add the alert for"),
+                            notification_channel: TextChannel = commands.Param(description="The channel to send the follow alerts in")):
         # Run checks on all the supplied arguments
         streamer_info = await self.check_streamer(username=streamer)
         if not streamer_info:
-            raise BadArgument(f"Could not find twitch user {streamer}!")
+            raise commands.BadArgument(f"Could not find twitch user {streamer}!")
         await self.check_channel_permissions(ctx, channel=notification_channel)
 
         #Checks done
@@ -372,9 +370,9 @@ class RecieverCommands(commands.Cog):
         embed.add_field(name="Notification Channel", value=notification_channel, inline=True)
         await ctx.send(embed=embed)
 
-    @slash_command(description="Remove a follow notification alert", options=[Option("streamer", "The name of the streamer to be removed", type=OptionType.STRING, required=True)])
-    @has_guild_permissions(administrator=True)
-    async def delfollow(self, ctx, streamer: str):
+    @commands.slash_command(description="Remove a follow notification alert")
+    @commands.has_guild_permissions(administrator=True)
+    async def delfollow(self, ctx: ApplicationCommandInteraction, streamer: str = commands.Param(description="The name of the streamer to be removed from alerts")):
         await self.callback_deletion(ctx, streamer)
 
     async def callback_deletion(self, ctx, streamer):

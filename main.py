@@ -1,34 +1,51 @@
-from discord import Intents, Colour, Activity, ActivityType, Forbidden, HTTPException, Embed
-from discord.ext import commands
-from discord.utils import utcnow
+from disnake import Intents, Colour, Activity, ActivityType, Forbidden, HTTPException, Embed, ButtonStyle, ApplicationCommandInteraction, PartialEmoji, Emoji
+from disnake.ui import View, Button
+from disnake.ext import commands
+from disnake.utils import utcnow
 from webserver import RecieverWebServer
 from aiohttp import ClientSession
-from asyncio import sleep
-from systemd.daemon import notify, Notification
-from systemd.journal import JournaldLogHandler
+from asyncio import sleep, iscoroutinefunction
 from json.decoder import JSONDecodeError
 from time import time
 import aiofiles
+import sys
 import logging
 import json
-from dislash import InteractionClient, ActionRow, Button, ButtonStyle
 from dateutil import parser
+from typing import Optional, Union, Callable
 
-class TwitchFollowManager(commands.Bot):
+class ButtonCallback(Button):
+    def __init__(
+        self,
+        *,
+        style: ButtonStyle = ButtonStyle.secondary,
+        label: Optional[str] = None,
+        disabled: bool = False,
+        custom_id: Optional[str] = None,
+        callback: Optional[Callable] = None,
+        url: Optional[str] = None,
+        emoji: Optional[Union[str, Emoji, PartialEmoji]] = None,
+        row: Optional[int] = None,
+    ):
+        super().__init__(style=style, label=label, disabled=disabled, custom_id=custom_id, url=url, emoji=emoji, row=row)
+        if not iscoroutinefunction(callback):
+            raise TypeError("Callback must be a coroutine!")
+        self.callback = callback
+
+class TwitchFollowManager(commands.InteractionBot):
     def __init__(self):
         intents = Intents.none()
         intents.guilds = True
-        super().__init__(command_prefix=commands.when_mentioned_or("t!"), intents=intents, activity=Activity(type=ActivityType.listening, name="the silence of the void"))
+        super().__init__(intents=intents, activity=Activity(type=ActivityType.listening, name="the silence of the void"))
 
         self.log = logging.getLogger("FollowChecker")
         self.log.setLevel(logging.INFO)
 
-        jhandler = JournaldLogHandler()
-        jhandler.setLevel(logging.INFO)
-        jhandler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
-        self.log.addHandler(jhandler)
+        shandler = logging.StreamHandler(sys.stdout)
+        shandler.setLevel(logging.DEBUG)
+        shandler.setFormatter(logging.Formatter('%(asctime)s:%(levelname)s:%(name)s: %(message)s'))
+        self.log.addHandler(shandler)
 
-        self.slash = InteractionClient(self, test_guilds=[749646865531928628])
         self.web_server = RecieverWebServer(self)
         self.loop.run_until_complete(self.web_server.start())
 
@@ -43,8 +60,8 @@ class TwitchFollowManager(commands.Bot):
         self.auth_url = f"https://id.twitch.tv/oauth2/authorize?client_id={self.auth['client_id']}&redirect_uri={self.auth['callback_url']}/authorize&force_verify=true&response_type=code&scope=user:manage:blocked_users"
 
     async def close(self):
-        notify(Notification.STOPPING)
-        await self.aSession.close()
+        if not self.aSession.closed:
+            await self.aSession.close()
         self.log.info("Shutting down...")
         await super().close()
 
@@ -55,7 +72,6 @@ class TwitchFollowManager(commands.Bot):
     @commands.Cog.listener()
     async def on_ready(self):
         self.log.info(f"------ Logged in as {self.user.name} - {self.user.id} ------")
-        notify(Notification.READY)
 
     async def api_request(self, url, session=None, method="get", **kwargs):
         session = session or self.aSession
@@ -105,10 +121,10 @@ class TwitchFollowManager(commands.Bot):
             async with aiofiles.open("config/follows.json") as f:
                 callbacks = json.loads(await f.read())
         except FileNotFoundError:
-            self.bot.log.error("Failed to read title callbacks config file!")
+            self.log.error("Failed to read title callbacks config file!")
             return
         except JSONDecodeError:
-            self.bot.log.error("Failed to read title callbacks config file!")
+            self.log.error("Failed to read title callbacks config file!")
             return
 
         still_following = False
@@ -117,13 +133,11 @@ class TwitchFollowManager(commands.Bot):
         if rj["total"] > 0:
             still_following = True
 
-        button_row = ActionRow(
-            Button(
-                style=ButtonStyle.red,
-                label="Block User",
-                custom_id=f"{data['event']['broadcaster_user_id']}/{data['event']['user_id']}"
-            )
-        )
+        class BlockView(View):
+            def __init__(self, data: dict):
+                super().__init__()
+                self.add_item(Button(style=ButtonStyle.red, label="Block User", custom_id=f"{data['event']['broadcaster_user_id']}/{data['event']['user_id']}"))
+
         user_response = await self.api_request(f"https://api.twitch.tv/helix/users?id={data['event']['user_id']}")
         user = (await user_response.json())["data"][0]
         created_at_timestamp = int(parser.parse(user["created_at"]).timestamp())
@@ -134,13 +148,14 @@ class TwitchFollowManager(commands.Bot):
         embed.add_field(name="Follower", value=user["login"])
         embed.add_field(name="Account Created", value=f"<t:{created_at_timestamp}:R>")
         embed.add_field(name="Mod Card", value=f"[Link](https://www.twitch.tv/popout/{data['event']['broadcaster_user_login']}/viewercard/{user['login']})")
-        embed.add_field(name="Still following?", value="Yes" if still_following else "No")
+        embed.add_field(name="Still following after 10s?", value="Yes" if still_following else "No")
         embed.set_footer(text=f"Follower User ID: {user['id']}")
-        for data in callbacks[channel]["channels"].values():
-            c = self.get_channel(data["notif_channel_id"])
+        view = BlockView(data)
+        for config_channels in callbacks[channel]["channels"].values():
+            c = self.get_channel(config_channels["notif_channel_id"])
             if c is not None:
                 try:
-                    await c.send(embed=embed, components=[button_row])
+                    await c.send(embed=embed, view=view)
                 except Forbidden:
                     pass
                 except HTTPException:
