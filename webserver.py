@@ -5,10 +5,13 @@ import hmac
 import hashlib
 import aiofiles
 from collections import deque
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from main import TwitchFollowManager
 
 class RecieverWebServer():
     def __init__(self, bot):
-        self.bot = bot
+        self.bot: TwitchFollowManager = bot
         self.port = 18276
         self.web_server = web.Application()
         self.web_server.add_routes([web.route('*', '/callback/{channel}', self._reciever)])
@@ -21,7 +24,7 @@ class RecieverWebServer():
         self.bot.log.info(f"Webserver running on localhost:{self.port}")
         return self.web_server
 
-    async def _reciever(self, request):
+    async def _reciever(self, request: web.Request):
         await self.bot.wait_until_ready()
         channel = request.match_info["channel"]
         self.bot.log.info(f"{request.method} from {channel}")
@@ -29,7 +32,7 @@ class RecieverWebServer():
             return await self.post_request(request, channel)
         return web.Response(status=404)
     
-    async def _authorize(self, request):
+    async def _authorize(self, request: web.Request):
         self.bot.log.info("Processing authorization")
         code = request.query.get("code", None)
         if code is None:
@@ -53,7 +56,7 @@ class RecieverWebServer():
         
         return web.Response(status=200, text="You may now close this tab")
 
-    async def verify_request(self, request, secret):
+    async def verify_request(self, request: web.Request, secret: str):
         try:
             async with aiofiles.open("cache/notifcache.cache") as f:
                 notifcache = deque(json.loads(await f.read()), maxlen=10)
@@ -85,7 +88,7 @@ class RecieverWebServer():
         return True
             
 
-    async def post_request(self, request, channel):
+    async def post_request(self, request: web.Request, channel: str):
         try:
             async with aiofiles.open("config/follows.json") as f:
                 callbacks = json.loads(await f.read())
@@ -122,11 +125,8 @@ class RecieverWebServer():
             return web.Response(status=202)
         elif mode == "notification":
             self.bot.log.info(f"Follow notification for {channel}")
-            return await self.notification(channel, data)
+            self.bot.queue.put_nowait(data)
+            return web.Response(status=202)
         else:
             self.bot.log.info("Unknown mode")
         return web.Response(status=404)
-
-    async def notification(self, channel, data):
-        await self.bot.new_follower(channel, data)
-        return web.Response(status=202)

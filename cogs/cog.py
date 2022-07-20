@@ -128,14 +128,6 @@ class RecieverCommands(commands.Cog):
             cog_count += 1
             self.bot.reload_extension(ext_name)
         await ctx.send(f"<:green_tick:809191812434231316> Succesfully reloaded! Reloaded {cog_count} cogs!", ephemeral=True)
-    
-    @commands.slash_command(description="Owner Only: Run streamer catchup manually")
-    @commands.is_owner()
-    async def catchup(self, ctx):
-        self.bot.log.info("Manually Running streamer catchup...")
-        await self.bot.catchup_streamers()
-        self.bot.log.info("Finished streamer catchup")
-        await ctx.send("Finished catchup!", ephemeral=True)
 
     @commands.slash_command(description="Get the invite link for the bot")
     async def invite(self, ctx):
@@ -167,23 +159,6 @@ class RecieverCommands(commands.Cog):
         embed.add_field(name="__System__", value=systeminfo, inline=False)
         embed.set_author(name=self.bot.user.name, icon_url=self.bot.user.display_avatar.with_size(128))
         embed.set_footer(text=f"Client ID: {self.bot.user.id}")
-        await ctx.send(embed=embed)
-
-    @commands.slash_command(description="Get how long the bot has been running")
-    async def uptime(self, ctx: ApplicationCommandInteraction):
-        epoch = time() - self.bot._uptime
-        conv = {
-            "days": str(epoch // 86400).split('.')[0],
-            "hours": str(epoch // 3600 % 24).split('.')[0],
-            "minutes": str(epoch // 60 % 60).split('.')[0],
-            "seconds": str(epoch % 60).split('.')[0],
-            "full": strftime('%Y-%m-%d %I:%M:%S %p %Z', localtime(self.bot._uptime))
-        }
-        description = f"{conv['days']} {'day' if conv['days'] == '1' else 'days'}, {conv['hours']} {'hour' if conv['hours'] == '1' else 'hours'}, {conv['minutes']} {'minute' if conv['minutes'] == '1' else 'minutes'} and {conv['seconds']} {'second' if conv['seconds'] == '1' else 'seconds'}"
-        embed = Embed(title="Uptime", description=description,
-                            color=self.bot.colour, timestamp=datetime.utcnow())
-        embed.set_footer(
-            text=f"ID: {ctx.guild.id} | Bot started at {conv['full']}")
         await ctx.send(embed=embed)
 
     async def aeval(self, ctx, code):

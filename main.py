@@ -4,7 +4,7 @@ from disnake.ext import commands
 from disnake.utils import utcnow
 from webserver import RecieverWebServer
 from aiohttp import ClientSession
-from asyncio import sleep, iscoroutinefunction
+from asyncio import sleep, iscoroutinefunction, Queue
 from json.decoder import JSONDecodeError
 from time import time
 import aiofiles
@@ -58,6 +58,8 @@ class TwitchFollowManager(commands.InteractionBot):
         self._uptime = time()
         self.aSession = None
         self.auth_url = f"https://id.twitch.tv/oauth2/authorize?client_id={self.auth['client_id']}&redirect_uri={self.auth['callback_url']}/authorize&force_verify=true&response_type=code&scope=user:manage:blocked_users"
+        self.queue = Queue(maxsize=0)
+        self.worker = self.loop.create_task(self._worker())
 
     async def close(self):
         if not self.aSession.closed:
@@ -115,16 +117,25 @@ class TwitchFollowManager(commands.InteractionBot):
         else:
             return response
 
-    async def new_follower(self, channel, data):
+    async def _worker(self):
+        self.log.debug("Queue Worker Started")
+        while not self.is_closed():
+            item = await self.queue.get()
+            self.log.debug(f"Recieved event! {type(item).__name__}")
+            await self.new_follower(item)
+            self.log.debug(f"Finished task {type(item).__name__}")
+            self.queue.task_done()
+
+    async def new_follower(self, data: dict):
         await sleep(10)
         try:
             async with aiofiles.open("config/follows.json") as f:
                 callbacks = json.loads(await f.read())
         except FileNotFoundError:
-            self.log.error("Failed to read title callbacks config file!")
+            self.log.error("Failed to read follows config file!")
             return
         except JSONDecodeError:
-            self.log.error("Failed to read title callbacks config file!")
+            self.log.error("Failed to read follows config file!")
             return
 
         still_following = False
@@ -151,7 +162,7 @@ class TwitchFollowManager(commands.InteractionBot):
         embed.add_field(name="Still following after 10s?", value="Yes" if still_following else "No")
         embed.set_footer(text=f"Follower User ID: {user['id']}")
         view = BlockView(data)
-        for config_channels in callbacks[channel]["channels"].values():
+        for config_channels in callbacks[data['event']['broadcaster_user_login']]["channels"].values():
             c = self.get_channel(config_channels["notif_channel_id"])
             if c is not None:
                 try:
